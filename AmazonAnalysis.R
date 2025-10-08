@@ -1,12 +1,28 @@
 library(tidymodels)
-library(embed) # for target encoding
+library(tidyverse)
+library(embed)
+library(vroom)
+library(DataExplorer)
+library(recipes)
+library(embed)
 
-my_recipe <- recipe(rFormula, data=trainData) %>%
-step_mutate_at(vars_I_want_to_mutate, fn = factor) %>% # turn all numeric features into factors
-step_other(vars_I_want_other_cat_in, threshold = .001) %>% # combines categorical values that occur <.1% i
-step_dummy(vars_I_want_to_dummy) %>% # dummy variable encoding
-step_lencode_mixed(vars_I_want_to_target_encode, outcome = vars(target_var)) #target encoding (must be 2-f
-# also step_lencode_glm() and step_lencode_bayes()
+setwd("C://Users//Isaac//OneDrive//Documents//fall 2025 semester//STAT 348//AmazonEmployeeAccess")
+
+train <- vroom("train.csv")
+test <- vroom("test.csv")
+
+# DataExplorer::plot_intro(train)
+# DataExplorer::plot_correlation(train)
+# DataExplorer::plot_bar(train)
+
+my_recipe <- recipe(ACTION ~., data=train) %>%
+  step_mutate_at(all_numeric_predictors(), fn = factor) %>% # turn all numeric features into factors
+  step_other(all_nominal_predictors(), threshold = .001) %>% # combines categorical values that occur <.1% i
+  step_dummy(all_nominal_predictors()) %>% # dummy variable encoding
+  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION))
+
+prepped_recipe <- prep(my_recipe) # Sets up the preprocessing using myDataSet13
+bake(prepped_recipe, new_data=train)
 
 
 # NOTE: some of these step functions are not appropriate to use together
