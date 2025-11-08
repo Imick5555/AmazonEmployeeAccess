@@ -7,6 +7,15 @@ library(embed)
 library(workflows)
 library(rpart)
 library(ranger)
+library(discrim)
+library(naivebayes)
+library(remotes)
+library(dplyr)
+library(reticulate)
+library(dials)
+library(kernlab)
+library(parsnip)
+
 
 train <- vroom("train.csv")
 test <- vroom("test.csv")
@@ -17,10 +26,15 @@ test <- vroom("test.csv")
 
 train <- train %>% mutate(ACTION = factor(ACTION))
 my_recipe <- recipe(ACTION ~., data=train) %>%
-  step_mutate_at(all_numeric_predictors(), fn = factor) %>% # turn all numeric features into factors
+  #step_mutate_at(all_numeric_predictors(), fn = factor) %>% # turn all numeric features into factors
+  update_role(MGR_ID, new_role="id") %>%
+  #step_mutate(color = factor(color)) %>%
+  #step_dummy(color, one_hot = TRUE) %>%
+  step_range(all_numeric_predictors(),min=0,max=1) %>%
   step_other(all_nominal_predictors(), threshold = .001) %>% # combines categorical values that occur <.1% i
-  step_dummy(all_nominal_predictors()) %>% # dummy variable encoding
-  step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION))
+  #step_dummy(all_nominal_predictors()) %>% # dummy variable encoding
+  step_pca(all_predictors(), threshold=0.5)
+#step_lencode_mixed(all_nominal_predictors(), outcome = vars(ACTION))
 # apply the recipe to your data
 
 prepped_recipe <- prep(my_recipe) # Sets up the preprocessing using myDataSet13
@@ -29,18 +43,28 @@ bake(prepped_recipe, new_data=train)
 # logRegModel <- logistic_reg(mixture=tune(), penalty=tune()) %>% #Type of model3
 #   set_engine("glmnet")
 
-my_mod <- rand_forest(mtry = tune(),
-                      min_n = tune(),
-                      trees=500) %>%
-set_engine("ranger") %>%
-set_mode("classification")
+# my_mod <- rand_forest(mtry = tune(),
+#                       min_n = tune(),
+#                       trees=500) %>%
+#   set_engine("ranger") %>%
+#   set_mode("classification")
+# svmRadial <- svm_rbf(rbf_sigma=tune(), cost=tune()) %>% # set or tune8
+#   set_mode("classification") %>%
+# set_engine("kernlab")
+
+svmPoly <- svm_poly(degree=tune(), cost=tune()) %>% # set or tune4
+  set_mode("classification") %>%
+set_engine("kernlab")
+
+# svmLinear <- svm_linear(cost = tune()) %>%
+#   set_mode("classification") %>%
+#   set_engine("kernlab")
 
 amazon_workflow <- workflow() |>
   add_recipe(my_recipe) |>
-  add_model(my_mod)
+  add_model(svmPoly)
 
 param_set <- extract_parameter_set_dials(amazon_workflow)
-param_set <- finalize(param_set, train)
 
 tuning_grid <- grid_regular(param_set, levels = 2)
 
@@ -52,9 +76,9 @@ folds <- vfold_cv(train, v = 2, repeats=1)
 
 ## Run the CV18
 CV_results <- amazon_workflow %>%
-      tune_grid(resamples=folds,
-                grid=tuning_grid,
-                metrics=metric_set(roc_auc, accuracy))
+  tune_grid(resamples=folds,
+            grid=tuning_grid,
+            metrics=metric_set(roc_auc, accuracy))
 
 best_tune <- CV_results |>
   select_best(metric="roc_auc")
@@ -65,21 +89,21 @@ final_wf <- amazon_workflow |>
 
 ## Make predictions8
 amazon_predictions <- final_wf %>%
-                            predict(new_data=test,
-                              type="prob") %>%
-                              bind_cols(test) %>%
-                              rename(ACTION=.pred_1) %>%
-                              select(id,ACTION)# "class" or "prob"
+  predict(new_data=test,
+          type="prob") %>%
+  bind_cols(test) %>%
+  rename(ACTION=.pred_1) %>%
+  select(id,ACTION)# "class" or "prob"
 # NOTE: some of these step functions are not appropriate to use together
 
 
 #kaggle_submission <- amazon_predictions %>%
- # bind_cols(test %>% select(MGR_ID)) %>%
-  #select(MGR_ID, .pred_1) %>%
-  #rename(ACTION=.pred_1) 
-  # mutate(count=pmax(0, count)) %>%
-  # mutate(count = exp(count)) %>%
-  # mutate(datetime=as.character(format(datetime)))
+# bind_cols(test %>% select(MGR_ID)) %>%
+#select(MGR_ID, .pred_1) %>%
+#rename(ACTION=.pred_1) 
+# mutate(count=pmax(0, count)) %>%
+# mutate(count = exp(count)) %>%
+# mutate(datetime=as.character(format(datetime)))
 
 # logRegPreds <- logReg_workflow %>%
 #   predict(new_data=test, type="prob") %>%
