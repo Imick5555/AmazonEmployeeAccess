@@ -47,28 +47,30 @@ amazon_workflow <- workflow() |>
 # 
 # tuning_grid <- grid_regular(param_set, levels = 2)
 
+
 folds <- vfold_cv(train, v = 5, repeats=1)
 
-tuning_grid <- grid_regular(mtry(range = c(3, 15)),
-                            min_n(range = c(2, 10)),
-                            levels = 5)
-
+tuning_grid <- grid_regular(mtry(range = c(2, 9)),
+                            min_n(range = c(1, 8)),
+                            levels = 3)
 ## Run the CV18
 CV_results <- amazon_workflow %>%
       tune_grid(resamples=folds,
                 grid=tuning_grid,
-                metrics=metric_set(roc_auc, accuracy))
+                metrics=metric_set(accuracy))
 
 best_tune <- CV_results |>
-  select_best(metric="roc_auc")
+  select_best(metric="accuracy")
 
 final_wf <- amazon_workflow |>
   finalize_workflow(best_tune)|>
-  fit(data = train)
+  fit(data = trainData)
+
+
 
 ## Make predictions8
-amazon_predictions <- final_wf %>%
-                            predict(new_data=test,
+ggg_predictions <- final_wf %>%
+                            predict(new_data=testData,
                               type="prob") %>%
                               bind_cols(test) %>%
                               rename(ACTION=.pred_1) %>%
